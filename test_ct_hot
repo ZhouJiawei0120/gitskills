@@ -1,0 +1,197 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 611,
+   "id": "1fe071d7",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<module 'solver.bid_simulation_data' from '/root/workspace/ad-strategy/bidding/solver/bid_simulation_data.py'>"
+      ]
+     },
+     "execution_count": 611,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# 加载配置\n",
+    "from importlib import reload\n",
+    "import solver.bid_simulation_data #  import DataGenerator\n",
+    "import simulator.bid_simulate #  import DataGenerator\n",
+    "import config # 配置文件\n",
+    "import config_ct_hot\n",
+    "import simulator.simulator\n",
+    "    \n",
+    "reload(simulator.simulator)\n",
+    "reload(config)\n",
+    "reload(config_ct_hot)\n",
+    "reload(simulator.bid_simulate)\n",
+    "reload(solver.bid_simulation_data)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 612,
+   "id": "2901a160",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "job = simulator.bid_simulate.BidSimulator(config_ct_hot, dg.flow_ratio)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 586,
+   "id": "b134ecab",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 直接通过内存加载数据（可能会内存超限）\n",
+    "scene = \"ct_hot\"\n",
+    "date = 20251015\n",
+    "history_data_file = \"./data/20251012_20251015.csv\"\n",
+    "charge_data_file = \"./data/20251012_20251014_charge_budget.csv\"\n",
+    "simulation_data_file = \"./data/20251015_ct_hot_request_data.csv\"\n",
+    "dg = solver.bid_simulation_data.DataGenerator(\n",
+    "    history_data_file, \n",
+    "    charge_data_file, \n",
+    "    simulation_data_file, \n",
+    "    scene,\n",
+    "    date\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 608,
+   "id": "aca2961d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 获取计划数据\n",
+    "s = dg.simulation_data\n",
+    "s[\"tcharge\"] = s[\"cpa\"] * s[\"cv\"]\n",
+    "s[\"charge\"] = s[\"price\"]\n",
+    "s = s.groupby(\"plan_id\").agg({\"tcharge\": \"sum\", \"charge\": \"sum\", \"cv\": \"sum\"}).reset_index()\n",
+    "\n",
+    "# 非新进成本出价计划\n",
+    "pdata = dg.history_data\n",
+    "pdata = pdata[(pdata.bid_type == 1.0) & (pdata.ds == 20251014)].groupby(\"plan_id\").sum().reset_index()\n",
+    "psdata = pd.merge(pdata, s, on=\"plan_id\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 609,
+   "id": "9a2a1769",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "budgets = {}\n",
+    "base_results = {}\n",
+    "new_results = {}"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "63025243",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "102212838\n"
+     ]
+    }
+   ],
+   "source": [
+    "for plan_id in psdata.plan_id.to_list():\n",
+    "    if plan_id in base_results.keys():\n",
+    "        continue\n",
+    "    print(plan_id)\n",
+    "    plan_data = dg.generate(plan_id)\n",
+    "    base_result, new_result = job.simulate(plan_data)\n",
+    "    base_results[plan_id] = base_result\n",
+    "    new_results[plan_id] = new_result\n",
+    "    budgets[plan_id] = plan_data.budget * dg.simulation_ratio * plan_data.scene_ratio"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 603,
+   "id": "d03adcdd",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "plan_id = 102014847\n",
+    "plan_data = dg.generate(plan_id)\n",
+    "budget = plan_data.budget * dg.simulation_ratio * plan_data.scene_ratio"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "322baf71",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "base_result, new_result = job.simulate(plan_data, True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9a0f37e7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "job.summary(base_result, budget)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8a2be3b6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "job.summary(new_result, budget)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "5f3171f1",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.9"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
